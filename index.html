@@ -622,7 +622,7 @@
   <footer>OVERLAP — FREE · POWERED BY HELIUS</footer>
 </div>
 
-<script>
+<script type="module">
 const HELIUS_KEY = '358632a3-a824-492b-9e53-1d147b6e850f';
 const HELIUS_RPC = `https://mainnet.helius-rpc.com/?api-key=${HELIUS_KEY}`;
 
@@ -862,39 +862,54 @@ function exportCSV() {
   a.click();
 }
 
-// ── Wallet Manager ──────────────────────────────────────────────────────────
-const STORAGE_KEY = 'overlap-wallets-v1';
-let globalWallets = {}; // merged: hardcoded + user-added
-let userWallets   = {}; // only user-added (from storage)
+// ── Firebase Setup ───────────────────────────────────────────────────────────
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+import { getFirestore, doc, setDoc, onSnapshot, getDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyDqONDYKXTJUMcEdQmAhTN00030LeSvtSo",
+  authDomain: "overlap-2afee.firebaseapp.com",
+  projectId: "overlap-2afee",
+  storageBucket: "overlap-2afee.firebasestorage.app",
+  messagingSenderId: "467661446034",
+  appId: "1:467661446034:web:cbe7b70c64bdecc1ca3f4b"
+};
+
+const app = initializeApp(firebaseConfig);
+const db  = getFirestore(app);
+const WALLETS_DOC = doc(db, "overlap", "wallets");
+
+// ── Wallet Manager ───────────────────────────────────────────────────────────
+let globalWallets = {};
+let userWallets   = {};
 
 function setSyncStatus(state) {
   const dot   = document.getElementById('syncDot');
   const label = document.getElementById('syncLabel');
   if (!dot) return;
-  dot.className   = 'sync-dot ' + state;
+  dot.className    = 'sync-dot ' + state;
   label.textContent = state === 'synced' ? 'synced' : state === 'syncing' ? 'saving...' : 'offline';
 }
 
-async function loadWallets() {
+// Realtime listener — fires on every change from any user
+function startRealtimeSync() {
   setSyncStatus('syncing');
-  try {
-    const result = await window.storage.get(STORAGE_KEY, true);
-    userWallets = result ? JSON.parse(result.value) : {};
-  } catch {
-    userWallets = {};
-  }
-  globalWallets = { ...TRACKED_BASE, ...userWallets };
-  setSyncStatus('synced');
-  renderWalletList();
-  updateWalletTabCount();
+  onSnapshot(WALLETS_DOC, (snap) => {
+    userWallets   = snap.exists() ? (snap.data().wallets || {}) : {};
+    globalWallets = { ...TRACKED_BASE, ...userWallets };
+    setSyncStatus('synced');
+    renderWalletList();
+    updateWalletTabCount();
+  }, () => setSyncStatus('offline'));
 }
 
 async function saveWallets() {
   setSyncStatus('syncing');
   try {
-    await window.storage.set(STORAGE_KEY, JSON.stringify(userWallets), true);
+    await setDoc(WALLETS_DOC, { wallets: userWallets });
     setSyncStatus('synced');
-  } catch {
+  } catch (e) {
+    console.error(e);
     setSyncStatus('offline');
   }
 }
@@ -903,7 +918,7 @@ async function addTrackedWallet() {
   const addr  = document.getElementById('newWalletAddr').value.trim();
   const label = document.getElementById('newWalletLabel').value.trim();
   if (!addr || !label) return;
-  if (addr.length < 32) { alert('Invalid address'); return; }
+  if (addr.length < 32) { alert('Invalid address — must be a full Solana public key'); return; }
 
   const btn = document.getElementById('addWalletBtn');
   btn.disabled = true;
@@ -915,27 +930,23 @@ async function addTrackedWallet() {
 
   document.getElementById('newWalletAddr').value  = '';
   document.getElementById('newWalletLabel').value = '';
-  btn.disabled = false;
+  btn.disabled    = false;
   btn.textContent = 'ADD';
-
-  renderWalletList();
-  updateWalletTabCount();
 }
 
 async function removeWallet(addr) {
   if (!userWallets[addr]) {
-    alert('Built-in wallets cannot be removed from here.');
+    alert('Built-in wallets cannot be removed.');
     return;
   }
+  if (!confirm(`Remove "${userWallets[addr]}"?`)) return;
   delete userWallets[addr];
   delete globalWallets[addr];
   await saveWallets();
-  renderWalletList();
-  updateWalletTabCount();
 }
 
 function renderWalletList() {
-  const el = document.getElementById('walletListEl');
+  const el    = document.getElementById('walletListEl');
   const count = document.getElementById('walletCount');
   const entries = Object.entries(globalWallets);
 
@@ -946,13 +957,12 @@ function renderWalletList() {
     return;
   }
 
-  // Show user-added first, then base
-  const userEntries = entries.filter(([a]) => userWallets[a]);
+  const userEntries = entries.filter(([a]) =>  userWallets[a]);
   const baseEntries = entries.filter(([a]) => !userWallets[a]);
   const sorted = [...userEntries, ...baseEntries];
 
   el.innerHTML = sorted.map(([addr, lbl]) => {
-    const short = addr.slice(0,6) + '...' + addr.slice(-4);
+    const short  = addr.slice(0,6) + '...' + addr.slice(-4);
     const isUser = !!userWallets[addr];
     return `<div class="wallet-item">
       <div class="wallet-item-addr">
@@ -974,20 +984,27 @@ function switchTab(tab) {
   document.querySelectorAll('.tab').forEach((t, i) => {
     t.classList.toggle('active', (i === 0) === (tab === 'scan'));
   });
-  document.getElementById('tab-scan').classList.toggle('active', tab === 'scan');
+  document.getElementById('tab-scan').classList.toggle('active',    tab === 'scan');
   document.getElementById('tab-wallets').classList.toggle('active', tab === 'wallets');
-  if (tab === 'wallets') loadWallets();
 }
 
-// Allow Enter key on wallet add inputs
 document.addEventListener('DOMContentLoaded', () => {
   ['newWalletAddr','newWalletLabel'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.addEventListener('keydown', e => { if (e.key === 'Enter') addTrackedWallet(); });
   });
-  loadWallets();
+  startRealtimeSync();
 });
-// ────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Expose to window for onclick handlers
+window.addCoin          = addCoin;
+window.removeCoin       = removeCoin;
+window.runScan          = runScan;
+window.exportCSV        = exportCSV;
+window.switchTab        = switchTab;
+window.addTrackedWallet = addTrackedWallet;
+window.removeWallet     = removeWallet;
 
 // Init with 2 coins
 addCoin();
