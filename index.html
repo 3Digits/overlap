@@ -678,132 +678,9 @@
     letter-spacing: 2px;
   }
 
-  /* Password Gate */
-  .pwd-overlay {
-    position: fixed;
-    inset: 0;
-    background: var(--bg);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 999;
-  }
-
-  .pwd-box {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 16px;
-    padding: 48px 40px;
-    max-width: 360px;
-    width: 90%;
-    text-align: center;
-    position: relative;
-    overflow: hidden;
-  }
-
-  .pwd-box::before {
-    content: "";
-    position: absolute;
-    top: 0; left: 0; right: 0;
-    height: 1px;
-    background: linear-gradient(90deg, transparent, var(--accent), transparent);
-  }
-
-  .pwd-logo {
-    font-family: "Bebas Neue", sans-serif;
-    font-size: 52px;
-    letter-spacing: 6px;
-    background: linear-gradient(135deg, var(--accent) 0%, #00ccff 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-    margin-bottom: 8px;
-  }
-
-  .pwd-sub {
-    font-family: var(--mono);
-    font-size: 10px;
-    letter-spacing: 3px;
-    color: var(--muted);
-    text-transform: uppercase;
-    margin-bottom: 32px;
-  }
-
-  .pwd-input-wrap { position: relative; margin-bottom: 12px; }
-
-  .pwd-input {
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    color: var(--text);
-    font-family: var(--mono);
-    font-size: 18px;
-    letter-spacing: 6px;
-    padding: 14px 18px;
-    text-align: center;
-    width: 100%;
-    outline: none;
-    transition: border-color 0.2s, box-shadow 0.2s;
-  }
-
-  .pwd-input:focus {
-    border-color: var(--accent);
-    box-shadow: 0 0 0 3px rgba(0,255,136,0.08);
-  }
-
-  .pwd-input.error {
-    border-color: var(--danger);
-    animation: shake 0.3s ease;
-  }
-
-  @keyframes shake {
-    0%, 100% { transform: translateX(0); }
-    25% { transform: translateX(-8px); }
-    75% { transform: translateX(8px); }
-  }
-
-  .pwd-btn {
-    width: 100%;
-    padding: 14px;
-    background: linear-gradient(135deg, var(--accent), #00ccff);
-    border: none;
-    border-radius: 8px;
-    color: #000;
-    font-family: "Bebas Neue", sans-serif;
-    font-size: 18px;
-    letter-spacing: 3px;
-    cursor: pointer;
-    transition: all 0.2s;
-    margin-top: 4px;
-  }
-
-  .pwd-btn:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(0,255,136,0.25); }
-
-  .pwd-error {
-    font-family: var(--mono);
-    font-size: 10px;
-    color: var(--danger);
-    letter-spacing: 1px;
-    margin-top: 10px;
-    min-height: 16px;
-  }
-
 </style>
 </head>
 <body>
-
-<!-- Password Gate -->
-<div class="pwd-overlay" id="pwdOverlay">
-  <div class="pwd-box">
-    <div class="pwd-logo">OVERLAP</div>
-    <div class="pwd-sub">Private Access</div>
-    <div class="pwd-input-wrap">
-      <input class="pwd-input" id="pwdInput" type="password" placeholder="••••••" maxlength="32" autocomplete="off">
-    </div>
-    <button class="pwd-btn" onclick="checkPassword()">ENTER</button>
-    <div class="pwd-error" id="pwdError"></div>
-  </div>
-</div>
 
 <div class="container">
 
@@ -852,7 +729,7 @@
       <div class="field"><label for="activityStart">From (local time)</label><input id="activityStart" type="datetime-local"></div>
       <div class="field"><label for="activityEnd">To (local time)</label><input id="activityEnd" type="datetime-local"></div>
     </div>
-    <p style="color:var(--muted);font-size:12px;line-height:1.6;margin-bottom:0;">Limited periods require incoming or outgoing activity in every selected coin. Balances and holding status are current, not historical snapshots. Date filtering requires Helius Developer plan or higher and can take longer for large scans.</p>
+    <p style="color:var(--muted);font-size:12px;line-height:1.6;margin-bottom:0;">Limited periods require incoming or outgoing activity in every selected coin. Balances and holding status are current, not historical snapshots. Date filtering requires Helius Developer plan or higher and can take longer for large scans. Both scans discover wallets from existing token accounts; wallets with closed accounts may be missing. The empty-account scan does not apply the minimum-supply filter.</p>
   </div>
 
   <!-- Wallet Manager -->
@@ -969,7 +846,7 @@
 
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
   <button class="scan-btn" id="scanBtn" onclick="runScan()">SCAN HOLDERS</button>
-  <button class="scan-btn" id="histBtn" onclick="runHistoricalScan()" style="background:linear-gradient(135deg,#0066ff,#00ccff);">SCAN HISTORICAL</button>
+  <button class="scan-btn" id="histBtn" onclick="runHistoricalScan()" style="background:linear-gradient(135deg,#0066ff,#00ccff);">SCAN INCLUDING EMPTY ACCOUNTS</button>
 </div>
 
   <div class="error-msg" id="errorMsg"></div>
@@ -996,7 +873,7 @@
 </div>
 
 <script type="module">import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-import { getFirestore, doc, setDoc, onSnapshot, getDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+import { getFirestore, doc, setDoc, onSnapshot, getDoc, runTransaction } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
 const HELIUS_KEY = 'aa0bf845-e4b7-4f65-b652-600258907ee4';
 const HELIUS_RPC = `https://mainnet.helius-rpc.com/?api-key=${HELIUS_KEY}`;
@@ -1045,6 +922,53 @@ let lastResults      = [];
 let lastLabels       = [];
 let lastIsHistorical = false;
 let lastActivityRange = null;
+let lastCoins = [];
+let scanInProgress = false;
+
+function escapeHTML(value) {
+  return String(value ?? '').replace(/[&<>"']/g, char => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  })[char]);
+}
+
+function formatBalance(value) {
+  if (value == null) return '—';
+  const [whole, fraction] = String(value).split('.');
+  return whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',') + (fraction ? '.' + fraction : '');
+}
+
+function tokenAmount(raw, decimals) {
+  const digits = String(raw).padStart(decimals + 1, '0');
+  if (!decimals) return digits;
+  return (digits.slice(0, -decimals) + '.' + digits.slice(-decimals)).replace(/\.?0+$/, '');
+}
+
+async function heliusRPC(method, params) {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const response = await fetch(HELIUS_RPC, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 'overlap', method, params }),
+      signal: AbortSignal.timeout(30000)
+    });
+    if (response.status === 429 && attempt < 2) {
+      await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
+      continue;
+    }
+    if (!response.ok) throw new Error(`Helius request failed (HTTP ${response.status}).`);
+    const data = await response.json();
+    if (data.error) throw new Error(data.error.message || 'Helius request failed.');
+    if (!data.result) throw new Error('Unexpected Helius response; scan was not completed.');
+    return data.result;
+  }
+}
+
+async function fetchTokenSupply(mint) {
+  const result = await heliusRPC('getTokenSupply', [mint, { commitment: 'finalized' }]);
+  if (!/^\d+$/.test(result.value?.amount) || !Number.isInteger(result.value?.decimals) || result.value.decimals < 0 || result.value.decimals > 255) {
+    throw new Error('Invalid token supply response.');
+  }
+  return { amount: BigInt(result.value.amount), decimals: result.value.decimals };
+}
 
 function addCoin(label = '', mint = '') {
   coinCount++;
@@ -1053,8 +977,8 @@ function addCoin(label = '', mint = '') {
   row.className = 'coin-row';
   row.id = `coin-${coinCount}`;
   row.innerHTML = `
-    <input class="label-input" placeholder="Label (e.g. PEPE)" value="${label}" style="font-size:12px;">
-    <input placeholder="Mint address (CA)" value="${mint}" style="font-size:11px;">
+    <input class="label-input" placeholder="Label (e.g. PEPE)" value="${escapeHTML(label)}" style="font-size:12px;">
+    <input placeholder="Mint address (CA)" value="${escapeHTML(mint)}" style="font-size:11px;">
     <button class="remove-btn" onclick="removeCoin(${coinCount})" title="Remove">×</button>
   `;
   list.appendChild(row);
@@ -1067,7 +991,7 @@ function removeCoin(id) {
 
 function setStatus(msg) {
   const el = document.getElementById('status');
-  el.innerHTML = `<span class="spinner"></span>${msg}`;
+  el.innerHTML = `<span class="spinner"></span>${escapeHTML(msg)}`;
   el.classList.add('visible');
 }
 
@@ -1092,34 +1016,27 @@ async function fetchHolders(mint, label) {
   let filtered = 0;
 
   while (true) {
-    const params = { mint, limit: 1000, displayOptions: { showZeroBalance: false } };
+    const params = { mint, limit: 1000, options: { showZeroBalance: false } };
     if (cursor) params.cursor = cursor;
 
-    const resp = await fetch(HELIUS_RPC, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ jsonrpc: '2.0', id: 'scan', method: 'getTokenAccounts', params })
-    });
-
-    const data = await resp.json();
-    if (data.error) throw new Error(`API error for ${label}: ${data.error.message}`);
-
-    const accounts = data?.result?.token_accounts || [];
+    const result = await heliusRPC('getTokenAccounts', params);
+    if (!Array.isArray(result.token_accounts)) throw new Error('Invalid token accounts response.');
+    const accounts = result.token_accounts;
     if (!accounts.length) break;
 
     for (const acc of accounts) {
       const wallet = acc.owner;
-      const amount = parseFloat(acc.amount || 0);
+      const amount = BigInt(acc.amount || 0);
       if (!wallet || amount <= 0) continue;
       if (BLACKLIST.has(wallet)) { filtered++; continue; }
       if (userBlocked[wallet])  { filtered++; continue; }
       if (!isOnCurve(wallet)) { filtered++; continue; }
-      holders[wallet] = amount;
+      holders[wallet] = (holders[wallet] || 0n) + amount;
     }
 
     setStatus(`Fetching ${label} — page ${page} (${Object.keys(holders).length} holders, ${filtered} filtered)`);
-    cursor = data?.result?.cursor;
-    if (!cursor || accounts.length < 1000) break;
+    cursor = result.cursor;
+    if (!cursor) break;
     page++;
     await new Promise(r => setTimeout(r, 150));
   }
@@ -1204,6 +1121,7 @@ async function filterWalletsByActivity(wallets, coins, range) {
 }
 
 async function runScan() {
+  if (scanInProgress) return;
   clearError();
   const rows = document.querySelectorAll('.coin-row');
   const coins = [];
@@ -1224,6 +1142,7 @@ async function runScan() {
   const minPct    = parseFloat(document.getElementById('minPct').value) || 0;
   const maxResults = parseInt(document.getElementById('maxResults').value) || 100;
 
+  scanInProgress = true;
   document.getElementById('scanBtn').disabled = true;
   document.getElementById('histBtn').disabled = true;
   document.getElementById('results').classList.remove('visible');
@@ -1231,10 +1150,12 @@ async function runScan() {
 
   try {
     const allHolders = [];
+    const supplies = [];
     for (const { label, mint } of coins) {
       setStatus(`Fetching holders for ${label}...`);
       const h = await fetchHolders(mint, label);
       allHolders.push(h);
+      supplies.push(await fetchTokenSupply(mint));
     }
 
     setStatus('Finding overlap...');
@@ -1248,19 +1169,20 @@ async function runScan() {
     common = await filterWalletsByActivity(common, coins, activityRange);
 
     // Compute totals for %
-    const totals = allHolders.map(h => Object.values(h).reduce((a, b) => a + b, 0));
+    const totals = supplies.map(supply => supply.amount);
 
     // Build results
     let results = [];
     for (const wallet of common) {
-      const pcts = allHolders.map((h, i) => totals[i] > 0 ? (h[wallet] / totals[i]) * 100 : 0);
+      const pcts = allHolders.map((h, i) => totals[i] > 0 ? (Number(h[wallet]) / Number(totals[i])) * 100 : 0);
       if (minPct > 0 && pcts.some(p => p < minPct)) continue;
-      results.push({ wallet, label: globalWallets[wallet] || '', amounts: allHolders.map(h => h[wallet]), pcts });
+      results.push({ wallet, label: globalWallets[wallet] || '', amounts: allHolders.map((h, i) => tokenAmount(h[wallet], supplies[i].decimals)), pcts });
     }
 
     results.sort((a, b) => b.pcts[0] - a.pcts[0]);
     lastResults = results;
     lastLabels  = coins.map(c => c.label);
+    lastCoins = coins.map(coin => ({ ...coin }));
     lastIsHistorical = false;
     lastActivityRange = activityRange;
 
@@ -1272,22 +1194,23 @@ async function runScan() {
     showError(e.message || 'Scan failed. Check mint addresses and try again.');
   }
 
+  scanInProgress = false;
   document.getElementById('scanBtn').disabled = false;
   document.getElementById('histBtn').disabled = false;
 }
 
 function renderResults(results, labels, total, historical = false) {
   const known = results.filter(r => r.label).length;
-  const modeTag = historical ? ' &nbsp;<span style="color:var(--accent2);font-size:9px;letter-spacing:1px;">HISTORICAL</span>' : '';
+  const modeTag = historical ? ' &nbsp;<span style="color:var(--accent2);font-size:9px;letter-spacing:1px;">INCLUDING EMPTY ACCOUNTS</span>' : '';
   document.getElementById('resultsStats').innerHTML =
     `<span>${total}</span> wallets match &nbsp;·&nbsp; <span>${known}</span> known${modeTag}`;
 
   // Build table header
   let headHTML = '<tr><th>Wallet</th><th>Known As</th>';
   if (historical) {
-    for (const l of labels) headHTML += `<th>${l.toUpperCase()} STATUS</th>`;
+    for (const l of labels) headHTML += `<th>${escapeHTML(l.toUpperCase())} STATUS</th>`;
   } else {
-    for (const l of labels) headHTML += `<th>${l.toUpperCase()} %</th><th>${l.toUpperCase()} BAL</th>`;
+    for (const l of labels) headHTML += `<th>${escapeHTML(l.toUpperCase())} %</th><th>${escapeHTML(l.toUpperCase())} BAL</th>`;
   }
   headHTML += '</tr>';
   document.getElementById('tableHead').innerHTML = headHTML;
@@ -1302,7 +1225,7 @@ function renderResults(results, labels, total, historical = false) {
       ? `Activity: ${new Date(lastActivityRange.start * 1000).toLocaleString()} – ${new Date(lastActivityRange.end * 1000).toLocaleString()}. Each wallet was active in every selected coin. `
       : 'No activity time filter. ';
     note.textContent = period + (historical
-      ? 'Historical candidates include zero-balance token accounts; closed accounts may be missing. Holding status is current.'
+      ? 'Coverage: existing token accounts, including empty accounts. Closed accounts are not covered; this is not a complete historical wallet list. Holding status is current.'
       : 'Balances are current.');
     document.getElementById('results').insertBefore(note, document.querySelector('.table-wrap'));
   }
@@ -1314,24 +1237,24 @@ function renderResults(results, labels, total, historical = false) {
   } else {
     for (const r of results) {
       const short = r.wallet.slice(0,6) + '...' + r.wallet.slice(-4);
-      const solscanUrl = `https://solscan.io/account/${r.wallet}`;
+      const solscanUrl = `https://solscan.io/account/${encodeURIComponent(r.wallet)}`;
       let row = `<tr>
         <td><div class="wallet-cell">
-          <a class="wallet-addr" href="${solscanUrl}" target="_blank" title="${r.wallet}">${short}</a>
+          <a class="wallet-addr" href="${solscanUrl}" target="_blank" title="${escapeHTML(r.wallet)}">${escapeHTML(short)}</a>
         </div></td>
-        <td>${r.label ? `<span class="known-badge">${r.label}</span>` : ''}</td>`;
+        <td>${r.label ? `<span class="known-badge">${escapeHTML(r.label)}</span>` : ''}</td>`;
       if (historical) {
         for (let i = 0; i < labels.length; i++) {
-          const holding = r.stillHolding[i];
+          const holding = r.stillHolding?.[i];
           row += `<td>${holding
             ? '<span class="holding-badge">HOLDING</span>'
-            : '<span class="exited-badge">EXITED</span>'}</td>`;
+            : '<span class="exited-badge">NOT HOLDING</span>'}</td>`;
         }
       } else {
         for (let i = 0; i < labels.length; i++) {
           const pctClass = r.pcts[i] >= 0.1 ? 'pct-high' : 'pct-cell';
           row += `<td class="${pctClass}">${r.pcts[i].toFixed(4)}%</td>`;
-          row += `<td class="bal-cell">${r.amounts[i].toLocaleString(undefined, {maximumFractionDigits: 0})}</td>`;
+          row += `<td class="bal-cell">${escapeHTML(formatBalance(r.amounts[i]))}</td>`;
         }
       }
       row += '</tr>';
@@ -1342,74 +1265,34 @@ function renderResults(results, labels, total, historical = false) {
   document.getElementById('results').classList.add('visible');
 }
 
+function buildCSV(results, labels, historical, range) {
+  const headers = ['Wallet', 'Known As', ...labels.flatMap(label => historical
+    ? [`${label} Status`] : [`${label} Balance`, `${label} % Supply`]), 'Activity From', 'Activity To'];
+  const rows = results.map(result => [result.wallet, result.label,
+    ...labels.flatMap((_, i) => historical
+      ? [result.stillHolding?.[i] ? 'HOLDING' : 'NOT HOLDING']
+      : [result.amounts[i] ?? '', result.pcts[i] == null ? '' : result.pcts[i].toFixed(4) + '%']),
+    range ? new Date(range.start * 1000).toISOString() : '',
+    range ? new Date(range.end * 1000).toISOString() : ''
+  ]);
+  const cell = value => {
+    let text = String(value ?? '');
+    if (/^[=+@\-\t\r\n]/.test(text)) text = "'" + text;
+    return '"' + text.replace(/"/g, '""') + '"';
+  };
+  return [headers, ...rows].map(row => row.map(cell).join(',')).join('\r\n');
+}
+
 function exportCSV() {
   if (!lastResults.length) return;
-  const headers = ['Wallet', 'Known As', ...lastLabels.flatMap(l => [`${l} Balance`, `${l} % Supply`])];
-  const rows = lastResults.map(r => [
-    r.wallet, r.label,
-    ...r.amounts.flatMap((a, i) => [a.toFixed(2), r.pcts[i].toFixed(4) + '%'])
-  ]);
-  const csv = [headers, ...rows].map(r => r.map(v => `"${v}"`).join(',')).join('\n');
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
-  a.download = `overlap_${lastLabels.join('_')}_${Date.now()}.csv`;
-  a.click();
+  const csv = buildCSV(lastResults, lastLabels, lastIsHistorical, lastActivityRange);
+  const link = document.createElement('a');
+  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+  link.href = url;
+  link.download = `overlap_${Date.now()}.csv`;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
-
-
-// ── Password Gate ────────────────────────────────────────────────────────────
-const PWD_HASH   = 'f0c7a7dcf00c8422d3eb78b00831d27a183b555b2826fbea42354aa467d8b75c';
-const COOKIE_KEY = 'overlap_auth';
-const COOKIE_DAYS = 30;
-
-function setCookie(name, value, days) {
-  const expires = new Date(Date.now() + days * 864e5).toUTCString();
-  document.cookie = name + '=' + value + '; expires=' + expires + '; path=/; SameSite=Strict';
-}
-
-function getCookie(name) {
-  return document.cookie.split('; ').reduce((r, v) => {
-    const [k, val] = v.split('=');
-    return k === name ? val : r;
-  }, null);
-}
-
-async function hashStr(str) {
-  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
-  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
-}
-
-async function checkPassword() {
-  const val = document.getElementById('pwdInput').value;
-  const hash = await hashStr(val);
-  if (hash === PWD_HASH) {
-    setCookie(COOKIE_KEY, hash, COOKIE_DAYS);
-    unlockApp();
-  } else {
-    const input = document.getElementById('pwdInput');
-    const err   = document.getElementById('pwdError');
-    input.classList.add('error');
-    err.textContent = 'Incorrect password';
-    setTimeout(() => { input.classList.remove('error'); err.textContent = ''; }, 1500);
-    input.value = '';
-  }
-}
-
-function unlockApp() {
-  document.getElementById('pwdOverlay').style.display = 'none';
-}
-
-function checkCookie() {
-  if (getCookie(COOKIE_KEY) === PWD_HASH) unlockApp();
-}
-
-// Allow Enter key on password input
-document.getElementById('pwdInput')?.addEventListener('keydown', e => {
-  if (e.key === 'Enter') checkPassword();
-});
-
-checkCookie();
-// ─────────────────────────────────────────────────────────────────────────────
 
 // ── Firebase Setup ───────────────────────────────────────────────────────────
 
@@ -1427,7 +1310,7 @@ const db  = getFirestore(app);
 const WALLETS_DOC = doc(db, "overlap", "wallets");
 
 // ── Wallet Manager ───────────────────────────────────────────────────────────
-let globalWallets = {};
+let globalWallets = { ...TRACKED_BASE };
 let userWallets   = {};
 
 function setSyncStatus(state) {
@@ -1513,11 +1396,11 @@ function renderWalletList() {
     const isUser = !!userWallets[addr];
     return `<div class="wallet-item">
       <div class="wallet-item-addr">
-        <a href="https://solscan.io/account/${addr}" target="_blank" style="color:inherit;text-decoration:none;" title="${addr}">${short}</a>
+        <a href="https://solscan.io/account/${escapeHTML(addr)}" target="_blank" style="color:inherit;text-decoration:none;" title="${escapeHTML(addr)}">${escapeHTML(short)}</a>
         ${isUser ? '<span style="font-size:9px;color:var(--muted);margin-left:6px;">✦ group</span>' : ''}
       </div>
-      <div class="wallet-item-label">${lbl}</div>
-      <button class="remove-btn" onclick="removeWallet('${addr}')" title="${isUser ? 'Remove' : 'Built-in'}" style="${!isUser ? 'opacity:0.2;cursor:default;' : ''}">×</button>
+      <div class="wallet-item-label">${escapeHTML(lbl)}</div>
+      <button class="remove-btn" onclick="removeWallet(${escapeHTML(JSON.stringify(addr))})" title="${isUser ? 'Remove' : 'Built-in'}" style="${!isUser ? 'opacity:0.2;cursor:default;' : ''}">×</button>
     </div>`;
   }).join('');
 }
@@ -1610,10 +1493,10 @@ function renderBlockedList() {
     const short = addr.slice(0,6) + '...' + addr.slice(-4);
     return `<div class="wallet-item">
       <div class="wallet-item-addr">
-        <a href="https://solscan.io/account/${addr}" target="_blank" style="color:inherit;text-decoration:none;" title="${addr}">${short}</a>
+        <a href="https://solscan.io/account/${escapeHTML(addr)}" target="_blank" style="color:inherit;text-decoration:none;" title="${escapeHTML(addr)}">${escapeHTML(short)}</a>
       </div>
-      <div style="font-family:var(--mono);font-size:11px;color:var(--danger);">${reason}</div>
-      <button class="remove-btn" onclick="removeBlockedWallet('${addr}')">×</button>
+      <div style="font-family:var(--mono);font-size:11px;color:var(--danger);">${escapeHTML(reason)}</div>
+      <button class="remove-btn" onclick="removeBlockedWallet(${escapeHTML(JSON.stringify(addr))})">×</button>
     </div>`;
   }).join('');
 }
@@ -1631,15 +1514,10 @@ async function saveScan() {
   const name = prompt('Name this scan (e.g. "GAS x BLOXX"):');
   if (!name || !name.trim()) return;
 
-  // Grab mint addresses from current inputs
-  const coinRows = document.querySelectorAll('.coin-row');
-  const coinMints = [];
-  coinRows.forEach(row => {
-    const inputs = row.querySelectorAll('input');
-    coinMints.push(inputs[1].value.trim());
-  });
+  const coinMints = lastCoins.map(coin => coin.mint);
 
   const scanData = {
+    id:          crypto.randomUUID(),
     name:        name.trim(),
     coins:       lastLabels,
     mints:       coinMints,
@@ -1650,18 +1528,18 @@ async function saveScan() {
     resultsData: lastResults.map(r => ({
       wallet:  r.wallet,
       stillHolding: r.stillHolding || [],
-      amounts: r.amounts.map(a => parseFloat(a) || 0),
-      pcts:    r.pcts.map(p => parseFloat(p) || 0),
+      amounts: r.amounts.map(a => a == null ? null : String(a)),
+      pcts:    r.pcts.map(p => p == null ? null : Number(p)),
     })),
   };
 
   try {
-    const snap = await getDoc(SCANS_COL);
-    const existing = snap.exists() ? (snap.data().scans || []) : [];
-    existing.unshift(scanData);
-    await setDoc(SCANS_COL, { scans: existing });
-    renderSavedScans(existing);
-    updateSavedTabCount(existing.length);
+    await runTransaction(db, async transaction => {
+      const snap = await transaction.get(SCANS_COL);
+      const existing = snap.exists() ? (snap.data().scans || []) : [];
+      transaction.set(SCANS_COL, { scans: [scanData, ...existing] });
+    });
+    await loadSavedScans();
     // Flash the tab
     switchTab('saved');
     setTimeout(() => switchTab('scan'), 1500);
@@ -1679,7 +1557,10 @@ async function loadSavedScans() {
   } catch { renderSavedScans([]); }
 }
 
+let displayedScans = [];
+
 function renderSavedScans(scans) {
+  displayedScans = scans;
   const el = document.getElementById('savedScansList');
   if (!scans.length) {
     el.innerHTML = '<div class="empty-wallets">No saved scans yet. Run a scan and hit Save.</div>';
@@ -1691,8 +1572,8 @@ function renderSavedScans(scans) {
     const hasData = s.resultsData && s.resultsData.length > 0;
     return `<div class="scan-item">
       <div class="scan-item-info">
-        <div class="scan-item-name">${s.name}</div>
-        <div class="scan-item-meta">${coins} &nbsp;·&nbsp; ${s.matchCount} wallets &nbsp;·&nbsp; ${date}</div>
+        <div class="scan-item-name">${escapeHTML(s.name)}</div>
+        <div class="scan-item-meta">${escapeHTML(coins)} &nbsp;·&nbsp; ${escapeHTML(s.matchCount)} wallets &nbsp;·&nbsp; ${date}</div>
       </div>
       <div class="scan-item-actions">
         ${hasData ? `<button class="load-btn" onclick="loadScanResults(${i})" style="border-color:var(--accent);color:var(--accent);">Results</button>` : ''}
@@ -1703,11 +1584,18 @@ function renderSavedScans(scans) {
   }).join('');
 }
 
-async function loadScanConfig(index) {
+async function findSavedScan(index) {
+  const target = displayedScans[index];
+  if (!target) return null;
   const snap = await getDoc(SCANS_COL);
   const scans = snap.exists() ? (snap.data().scans || []) : [];
-  const scan  = scans[index];
-  if (!scan) return;
+  return scans.find(scan => target.id ? scan.id === target.id
+    : scan.savedAt === target.savedAt && scan.name === target.name) || null;
+}
+
+async function loadScanConfig(index) {
+  const scan = await findSavedScan(index);
+  if (!scan || scanInProgress) return;
   document.getElementById('coinsList').innerHTML = '';
   coinCount = 0;
   scan.coins.forEach((label, i) => addCoin(label, scan.mints ? scan.mints[i] || '' : ''));
@@ -1717,9 +1605,8 @@ async function loadScanConfig(index) {
 }
 
 async function loadScanResults(index) {
-  const snap  = await getDoc(SCANS_COL);
-  const scans = snap.exists() ? (snap.data().scans || []) : [];
-  const scan  = scans[index];
+  if (scanInProgress) return;
+  const scan = await findSavedScan(index);
   if (!scan || !scan.resultsData || !scan.resultsData.length) {
     alert('No result data stored. Re-run the scan and save it again.');
     return;
@@ -1729,10 +1616,11 @@ async function loadScanResults(index) {
     wallet:  r.wallet,
     stillHolding: r.stillHolding || [],
     label:   globalWallets[r.wallet] || '',
-    amounts: r.amounts.map(a => parseFloat(a) || 0),
-    pcts:    r.pcts.map(p => parseFloat(p) || 0),
+    amounts: r.amounts.map(a => a == null ? null : String(a)),
+    pcts:    r.pcts.map(p => p == null ? null : Number(p)),
   }));
   lastLabels       = scan.coins;
+  lastCoins = scan.coins.map((label, i) => ({ label, mint: scan.mints?.[i] || '' }));
   lastIsHistorical = Boolean(scan.historical);
   lastActivityRange = scan.activityRange || null;
 
@@ -1749,28 +1637,38 @@ async function loadScanResults(index) {
   }, 50);
 }
 
-let pendingDeleteIndex = null;
+let pendingDeleteScan = null;
 
 function confirmDeleteScan(index) {
-  pendingDeleteIndex = index;
+  pendingDeleteScan = displayedScans[index] || null;
+  if (!pendingDeleteScan) return;
   document.getElementById('confirmOverlay').style.display = 'flex';
   document.getElementById('confirmYesBtn').onclick = executeDeleteScan;
 }
 
 function closeConfirm() {
-  pendingDeleteIndex = null;
+  pendingDeleteScan = null;
   document.getElementById('confirmOverlay').style.display = 'none';
 }
 
 async function executeDeleteScan() {
+  const target = pendingDeleteScan;
   closeConfirm();
-  if (pendingDeleteIndex === null) return;
-  const snap = await getDoc(SCANS_COL);
-  const scans = snap.exists() ? (snap.data().scans || []) : [];
-  scans.splice(pendingDeleteIndex, 1);
-  await setDoc(SCANS_COL, { scans });
-  renderSavedScans(scans);
-  updateSavedTabCount(scans.length);
+  if (!target) return;
+  try {
+    await runTransaction(db, async transaction => {
+      const snap = await transaction.get(SCANS_COL);
+      const scans = snap.exists() ? (snap.data().scans || []) : [];
+      const index = scans.findIndex(scan => target.id ? scan.id === target.id
+        : scan.savedAt === target.savedAt && scan.name === target.name);
+      if (index < 0) return;
+      scans.splice(index, 1);
+      transaction.set(SCANS_COL, { scans });
+    });
+    await loadSavedScans();
+  } catch (error) {
+    alert('Failed to delete: ' + error.message);
+  }
 }
 
 function updateSavedTabCount(n) {
@@ -1781,9 +1679,9 @@ function updateSavedTabCount(n) {
 
 
 // ── Historical Scan ───────────────────────────────────────────────────────────
-// Uses showZeroBalance:true to get all wallets that ever held the token
+// Includes existing empty token accounts. This is not an archival holder index.
 // Much faster than parsing transactions — same API as fetchHolders
-async function fetchAllEverHeld(mint, label) {
+async function fetchIncludingEmptyAccounts(mint, label) {
   const wallets = new Set();
   let cursor    = null;
   let page      = 1;
@@ -1793,20 +1691,13 @@ async function fetchAllEverHeld(mint, label) {
     const params = {
       mint,
       limit: 1000,
-      displayOptions: { showZeroBalance: true },
+      options: { showZeroBalance: true },
       ...(cursor ? { cursor } : {})
     };
 
-    const resp = await fetch(HELIUS_RPC, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ jsonrpc: '2.0', id: 'hist', method: 'getTokenAccounts', params })
-    });
-
-    const data = await resp.json();
-    if (data.error) throw new Error(`API error for ${label}: ${data.error.message}`);
-
-    const accounts = data?.result?.token_accounts || [];
+    const result = await heliusRPC('getTokenAccounts', params);
+    if (!Array.isArray(result.token_accounts)) throw new Error('Invalid token accounts response.');
+    const accounts = result.token_accounts;
     if (!accounts.length) break;
 
     for (const acc of accounts) {
@@ -1818,9 +1709,9 @@ async function fetchAllEverHeld(mint, label) {
       wallets.add(w);
     }
 
-    setStatus(`[${label}] Historical — page ${page} (${wallets.size} unique wallets, ${filtered} filtered)`);
-    cursor = data?.result?.cursor;
-    if (!cursor || accounts.length < 1000) break;
+    setStatus(`[${label}] Including empty accounts — page ${page} (${wallets.size} unique wallets, ${filtered} filtered)`);
+    cursor = result.cursor;
+    if (!cursor) break;
     page++;
     await new Promise(r => setTimeout(r, 150));
   }
@@ -1829,6 +1720,7 @@ async function fetchAllEverHeld(mint, label) {
 }
 
 async function runHistoricalScan() {
+  if (scanInProgress) return;
   clearError();
   const rows = document.querySelectorAll('.coin-row');
   const coins = [];
@@ -1848,10 +1740,11 @@ async function runHistoricalScan() {
 
   const maxResults = parseInt(document.getElementById('maxResults').value) || 100;
 
+  scanInProgress = true;
   document.getElementById('scanBtn').disabled  = true;
   document.getElementById('histBtn').disabled  = true;
   document.getElementById('results').classList.remove('visible');
-  setStatus('Starting historical scan...');
+  setStatus('Starting scan including empty accounts...');
 
   try {
     // Fetch current holders first for "still holding" flag
@@ -1862,15 +1755,15 @@ async function runHistoricalScan() {
       currentHolderSets.push(new Set(Object.keys(h)));
     }
 
-    // Fetch all-time holders (including zero balance / sold)
+    // Fetch current account owners, including accounts with zero balances.
     const allHistorical = [];
     for (const { label, mint } of coins) {
-      setStatus(`[${label}] Fetching all-time holders (including sold)...`);
-      const wallets = await fetchAllEverHeld(mint, label);
+      setStatus(`[${label}] Fetching existing accounts (including empty)...`);
+      const wallets = await fetchIncludingEmptyAccounts(mint, label);
       allHistorical.push(wallets);
     }
 
-    setStatus('Finding historical overlap...');
+    setStatus('Finding overlap including empty accounts...');
 
     // Intersection of all historical wallet sets
     let common = new Set(allHistorical[0]);
@@ -1903,6 +1796,7 @@ async function runHistoricalScan() {
 
     lastResults = results;
     lastLabels  = coins.map(c => c.label);
+    lastCoins = coins.map(coin => ({ ...coin }));
     lastIsHistorical = true;
     lastActivityRange = activityRange;
 
@@ -1914,6 +1808,7 @@ async function runHistoricalScan() {
     showError(e.message || 'Historical scan failed.');
   }
 
+  scanInProgress = false;
   document.getElementById('scanBtn').disabled = false;
   document.getElementById('histBtn').disabled = false;
 }
@@ -1972,11 +1867,11 @@ async function runWalletScan() {
         ${coins.map((c, i) => `
           <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);">
             <span style="font-family:var(--mono);font-size:10px;color:var(--muted);width:20px;">${i+1}</span>
-            <span style="font-family:var(--mono);font-size:11px;color:var(--accent);flex:1;">${c.symbol}</span>
-            <span style="font-family:var(--mono);font-size:9px;color:var(--muted);flex:2;">${c.mint}</span>
+            <span style="font-family:var(--mono);font-size:11px;color:var(--accent);flex:1;">${escapeHTML(c.symbol)}</span>
+            <span style="font-family:var(--mono);font-size:9px;color:var(--muted);flex:2;">${escapeHTML(c.mint)}</span>
           </div>`).join('')}
       </div>
-      <button class="scan-btn" onclick="loadWalletCoinsAndScan()" style="width:100%;margin-top:8px;background:linear-gradient(135deg,#0066ff,#00ccff);">LOAD & SCAN HISTORICAL</button>
+      <button class="scan-btn" onclick="loadWalletCoinsAndScan()" style="width:100%;margin-top:8px;background:linear-gradient(135deg,#0066ff,#00ccff);">LOAD & SCAN INCLUDING EMPTY ACCOUNTS</button>
     `;
 
     // Store for use by loadWalletCoinsAndScan
@@ -1990,6 +1885,7 @@ async function runWalletScan() {
 }
 
 function loadWalletCoinsAndScan() {
+  if (scanInProgress) return;
   const coins = window._walletScanCoins;
   if (!coins || !coins.length) return;
 

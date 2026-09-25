@@ -80,21 +80,23 @@ test('API errors and malformed responses fail instead of returning unfiltered wa
     await assert.rejects(c.filterWalletsByActivity(new Set(['both']), [{ mint: 'first' }], { start: 100, end: 200 }));
   }
 });
-test('both scan modes filter before rendering and keep unfiltered balance totals', async () => {
+test('both scan modes filter before rendering and use true token supply even when account exclusions shrink totals', async () => {
   for (const historical of [false, true]) {
     const { context: c, elements: e } = setup();
     for (const id of ['scanBtn', 'histBtn', 'results', 'minPct', 'maxResults']) e[id] = { value: '', classList: { remove() {} } };
     e.activityPeriod.value = '1';
     c.document.querySelectorAll = () => ['first', 'second'].map(mint => ({ querySelectorAll: () => [{ value: mint }, { value: mint }] }));
     Object.assign(c, { clearError() {}, clearStatus() {}, showError: message => { throw Error(message); }, globalWallets: {},
-      fetchHolders: async () => ({ both: 10, one: 90 }),
-      fetchAllEverHeld: async () => new Set(['both', 'one']),
+      fetchHolders: async () => ({ both: 10n, one: 90n }),
+      fetchTokenSupply: async () => ({ amount: 1000n, decimals: 0 }),
+      tokenAmount: raw => String(raw),
+      fetchIncludingEmptyAccounts: async () => new Set(['both', 'one']),
       filterWalletsByActivity: async (wallets, coins, range) => { assert.equal(wallets.size, 2); assert.equal(coins.length, 2); assert.ok(range.start < range.end); return new Set(['both']); },
-      renderResults: (results, labels, total, mode) => { assert.equal(total, 1); assert.equal(results[0].wallet, 'both'); assert.equal(mode, historical); if (!historical) assert.equal(results[0].pcts[0], 10); }
+      renderResults: (results, labels, total, mode) => { assert.equal(total, 1); assert.equal(results[0].wallet, 'both'); assert.equal(mode, historical); if (!historical) assert.equal(results[0].pcts[0], 1); }
     });
     const start = html.indexOf(historical ? 'async function runHistoricalScan()' : 'async function runScan()');
     const end = html.indexOf(historical ? '// ─────────────────────────────────────────────────────────────────────────────' : 'function renderResults(', start);
-    vm.runInContext('let lastResults, lastLabels, lastIsHistorical, lastActivityRange;\n' + html.slice(start, end), c);
+    vm.runInContext('let lastResults, lastLabels, lastIsHistorical, lastActivityRange, lastCoins, scanInProgress = false;\n' + html.slice(start, end), c);
     await (historical ? c.runHistoricalScan() : c.runScan());
     assert.equal(e.scanBtn.disabled, false);
     assert.equal(e.histBtn.disabled, false);
