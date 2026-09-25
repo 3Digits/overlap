@@ -133,7 +133,7 @@
     letter-spacing: 1px;
   }
 
-  input {
+  input, select {
     background: var(--bg);
     border: 1px solid var(--border);
     border-radius: 8px;
@@ -146,7 +146,7 @@
     outline: none;
   }
 
-  input:focus {
+  input:focus, select:focus {
     border-color: var(--accent);
     box-shadow: 0 0 0 3px rgba(0,255,136,0.08);
   }
@@ -834,6 +834,27 @@
     </div>
   </div>
 
+  <div class="card">
+    <div class="card-title">// Coin Activity Period</div>
+    <div class="field">
+      <label for="activityPeriod">Time range (applies to both scans)</label>
+      <select id="activityPeriod" onchange="updateActivityPeriod()">
+        <option value="all">All time / no activity filter</option>
+        <option value="1">Last hour</option>
+        <option value="6">Last 6 hours</option>
+        <option value="24">Last 24 hours</option>
+        <option value="168">Last 7 days</option>
+        <option value="720">Last 30 days</option>
+        <option value="custom">Custom date range</option>
+      </select>
+    </div>
+    <div id="customActivityRange" class="filter-row" style="display:none;margin-top:16px;">
+      <div class="field"><label for="activityStart">From (local time)</label><input id="activityStart" type="datetime-local"></div>
+      <div class="field"><label for="activityEnd">To (local time)</label><input id="activityEnd" type="datetime-local"></div>
+    </div>
+    <p style="color:var(--muted);font-size:12px;line-height:1.6;margin-bottom:0;">Limited periods require incoming or outgoing activity in every selected coin. Balances and holding status are current, not historical snapshots. Date filtering requires Helius Developer plan or higher and can take longer for large scans.</p>
+  </div>
+
   <!-- Wallet Manager -->
   <div style="margin-bottom:16px;">
     <div class="tab-bar">
@@ -1023,6 +1044,7 @@ let coinCount = 0;
 let lastResults      = [];
 let lastLabels       = [];
 let lastIsHistorical = false;
+let lastActivityRange = null;
 
 function addCoin(label = '', mint = '') {
   coinCount++;
@@ -1105,6 +1127,82 @@ async function fetchHolders(mint, label) {
   return holders;
 }
 
+function updateActivityPeriod() {
+  document.getElementById('customActivityRange').style.display =
+    document.getElementById('activityPeriod').value === 'custom' ? 'grid' : 'none';
+}
+
+function readActivityRange(now = Date.now()) {
+  const period = document.getElementById('activityPeriod').value;
+  if (period === 'all') return null;
+  let start, end;
+  if (period === 'custom') {
+    start = new Date(document.getElementById('activityStart').value).getTime();
+    end = new Date(document.getElementById('activityEnd').value).getTime();
+    if (!Number.isFinite(start) || !Number.isFinite(end)) {
+      throw new Error('Choose both a start and end date.');
+    }
+    if (start >= end) throw new Error('The start date must be before the end date.');
+    if (end > now) throw new Error('The end date cannot be in the future.');
+  } else {
+    const hours = Number(period);
+    if (!Number.isFinite(hours) || hours <= 0) throw new Error('Choose a valid time range.');
+    end = now;
+    start = now - hours * 3600000;
+  }
+  return { start: Math.floor(start / 1000), end: Math.floor(end / 1000), period };
+}
+
+function restoreActivityRange(range) {
+  document.getElementById('activityPeriod').value = range ? range.period : 'all';
+  const localDate = seconds => {
+    const date = new Date(seconds * 1000);
+    return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  };
+  document.getElementById('activityStart').value = range ? localDate(range.start) : '';
+  document.getElementById('activityEnd').value = range ? localDate(range.end) : '';
+  updateActivityPeriod();
+}
+
+// Check the intersected wallets, not every holder. Mint and time filtering happen
+// on the server; one matching transfer is enough, so no history is truncated.
+async function filterWalletsByActivity(wallets, coins, range) {
+  if (!range) return wallets;
+  const matches = new Set();
+  let checked = 0;
+  for (const wallet of wallets) {
+    let matchesEveryCoin = true;
+    for (const { mint, label } of coins) {
+      setStatus(`Checking activity — wallet ${checked + 1}/${wallets.size}, ${label}...`);
+      const resp = await fetch(HELIUS_RPC, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0', id: 'activity', method: 'getTransfersByAddress',
+          params: [wallet, {
+            mint, limit: 1, direction: 'any', solMode: 'separate',
+            filters: { blockTime: { gte: range.start, lte: range.end } }
+          }]
+        })
+      });
+      if (!resp.ok) throw new Error(`Activity check failed (HTTP ${resp.status}). Date filtering requires Helius Developer plan or higher. Try again or select All time.`);
+      const data = await resp.json();
+      if (data.error) throw new Error(`Activity check failed: ${data.error.message}. Date filtering requires Helius Developer plan or higher.`);
+      if (!Array.isArray(data.result?.data)) throw new Error('Unexpected activity response. Please try again.');
+      if (!data.result.data.some(t => t.mint === mint && t.blockTime >= range.start && t.blockTime <= range.end &&
+          (t.fromUserAccount === wallet || t.toUserAccount === wallet))) {
+        matchesEveryCoin = false;
+        break;
+      }
+      await new Promise(resolve => setTimeout(resolve, 150));
+    }
+    if (matchesEveryCoin) matches.add(wallet);
+    checked++;
+    await new Promise(resolve => setTimeout(resolve, 150));
+  }
+  return matches;
+}
+
 async function runScan() {
   clearError();
   const rows = document.querySelectorAll('.coin-row');
@@ -1118,10 +1216,16 @@ async function runScan() {
 
   if (coins.length < 2) return showError('Please enter at least 2 coins.');
 
+  let activityRange;
+  try { activityRange = readActivityRange(); }
+  catch (e) { return showError(e.message); }
+
+
   const minPct    = parseFloat(document.getElementById('minPct').value) || 0;
   const maxResults = parseInt(document.getElementById('maxResults').value) || 100;
 
   document.getElementById('scanBtn').disabled = true;
+  document.getElementById('histBtn').disabled = true;
   document.getElementById('results').classList.remove('visible');
   setStatus('Starting scan...');
 
@@ -1141,6 +1245,8 @@ async function runScan() {
       common = new Set([...common].filter(w => allHolders[i][w]));
     }
 
+    common = await filterWalletsByActivity(common, coins, activityRange);
+
     // Compute totals for %
     const totals = allHolders.map(h => Object.values(h).reduce((a, b) => a + b, 0));
 
@@ -1156,6 +1262,7 @@ async function runScan() {
     lastResults = results;
     lastLabels  = coins.map(c => c.label);
     lastIsHistorical = false;
+    lastActivityRange = activityRange;
 
     clearStatus();
     renderResults(results.slice(0, maxResults), lastLabels, results.length, false);
@@ -1166,6 +1273,7 @@ async function runScan() {
   }
 
   document.getElementById('scanBtn').disabled = false;
+  document.getElementById('histBtn').disabled = false;
 }
 
 function renderResults(results, labels, total, historical = false) {
@@ -1184,18 +1292,19 @@ function renderResults(results, labels, total, historical = false) {
   headHTML += '</tr>';
   document.getElementById('tableHead').innerHTML = headHTML;
 
-  // Add historical note
-  const noteEl = document.getElementById('histNote');
-  if (historical) {
-    if (!noteEl) {
-      const note = document.createElement('div');
-      note.id = 'histNote';
-      note.className = 'hist-note';
-      note.innerHTML = '⚡ Historical mode — showing every wallet that ever interacted with these coins';
-      document.getElementById('results').insertBefore(note, document.querySelector('.table-wrap'));
-    }
-  } else {
-    if (noteEl) noteEl.remove();
+  // Always refresh the note when a new scan or saved result is displayed.
+  document.getElementById('histNote')?.remove();
+  if (historical || lastActivityRange) {
+    const note = document.createElement('div');
+    note.id = 'histNote';
+    note.className = 'hist-note';
+    const period = lastActivityRange
+      ? `Activity: ${new Date(lastActivityRange.start * 1000).toLocaleString()} – ${new Date(lastActivityRange.end * 1000).toLocaleString()}. Each wallet was active in every selected coin. `
+      : 'No activity time filter. ';
+    note.textContent = period + (historical
+      ? 'Historical candidates include zero-balance token accounts; closed accounts may be missing. Holding status is current.'
+      : 'Balances are current.');
+    document.getElementById('results').insertBefore(note, document.querySelector('.table-wrap'));
   }
 
   // Build rows
@@ -1535,9 +1644,12 @@ async function saveScan() {
     coins:       lastLabels,
     mints:       coinMints,
     savedAt:     Date.now(),
+    activityRange: lastActivityRange,
+    historical: lastIsHistorical,
     matchCount:  lastResults.length,
     resultsData: lastResults.map(r => ({
       wallet:  r.wallet,
+      stillHolding: r.stillHolding || [],
       amounts: r.amounts.map(a => parseFloat(a) || 0),
       pcts:    r.pcts.map(p => parseFloat(p) || 0),
     })),
@@ -1599,6 +1711,7 @@ async function loadScanConfig(index) {
   document.getElementById('coinsList').innerHTML = '';
   coinCount = 0;
   scan.coins.forEach((label, i) => addCoin(label, scan.mints ? scan.mints[i] || '' : ''));
+  restoreActivityRange(scan.activityRange || null);
   switchTab('scan');
   document.getElementById('coinsList').scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
@@ -1614,21 +1727,24 @@ async function loadScanResults(index) {
 
   lastResults = scan.resultsData.map(r => ({
     wallet:  r.wallet,
+    stillHolding: r.stillHolding || [],
     label:   globalWallets[r.wallet] || '',
     amounts: r.amounts.map(a => parseFloat(a) || 0),
     pcts:    r.pcts.map(p => parseFloat(p) || 0),
   }));
   lastLabels       = scan.coins;
-  lastIsHistorical = false;
+  lastIsHistorical = Boolean(scan.historical);
+  lastActivityRange = scan.activityRange || null;
 
   // Pre-fill coin inputs
   document.getElementById('coinsList').innerHTML = '';
   coinCount = 0;
   scan.coins.forEach((label, i) => addCoin(label, scan.mints ? scan.mints[i] || '' : ''));
+  restoreActivityRange(scan.activityRange || null);
 
   switchTab('scan');
   setTimeout(() => {
-    renderResults(lastResults, lastLabels, lastResults.length, false);
+    renderResults(lastResults, lastLabels, lastResults.length, lastIsHistorical);
     document.getElementById('results').scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, 50);
 }
@@ -1725,6 +1841,11 @@ async function runHistoricalScan() {
 
   if (coins.length < 2) return showError('Please enter at least 2 coins.');
 
+  let activityRange;
+  try { activityRange = readActivityRange(); }
+  catch (e) { return showError(e.message); }
+
+
   const maxResults = parseInt(document.getElementById('maxResults').value) || 100;
 
   document.getElementById('scanBtn').disabled  = true;
@@ -1757,6 +1878,8 @@ async function runHistoricalScan() {
       common = new Set([...common].filter(w => allHistorical[i].has(w)));
     }
 
+    common = await filterWalletsByActivity(common, coins, activityRange);
+
     // Build results — check if still holding each coin
     const results = [];
     for (const wallet of common) {
@@ -1781,6 +1904,7 @@ async function runHistoricalScan() {
     lastResults = results;
     lastLabels  = coins.map(c => c.label);
     lastIsHistorical = true;
+    lastActivityRange = activityRange;
 
     clearStatus();
     renderResults(results.slice(0, maxResults), lastLabels, results.length, true);
@@ -1880,6 +2004,7 @@ function loadWalletCoinsAndScan() {
 window.runWalletScan          = runWalletScan;
 window.loadWalletCoinsAndScan = loadWalletCoinsAndScan;
 window.runHistoricalScan     = runHistoricalScan;
+window.updateActivityPeriod = updateActivityPeriod;
 window.addCoin            = addCoin;
 window.removeCoin         = removeCoin;
 window.runScan            = runScan;
